@@ -69,18 +69,9 @@ export async function generateItineraryFromVideos(
     );
 
     // Step 3: Ask Gemini to generate the itinerary using all video blocks
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-vision:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `You're an AI travel planner. The user wants a detailed 2-day itinerary in ${location}. 
+const allParts = [
+  {
+    text: `You're an AI travel planner. The user wants a detailed 2-day itinerary in ${location}. 
 Use the following YouTube Shorts (with thumbnails, captions, and metadata) to infer:
 
 - Main activities
@@ -99,15 +90,28 @@ Use the following YouTube Shorts (with thumbnails, captions, and metadata) to in
 
 Use real content only. Do not hallucinate or guess.
 
-Videos:`,
-                },
-              ],
-            },
-            ...videoBlocks,
-          ],
-        }),
-      }
-    );
+Videos:`
+  },
+  ...videoBlocks.flatMap((video) => video.content),
+];
+
+const geminiRes = await fetch(
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: allParts, // text-only: title, description, tags, captions
+        },
+      ],
+    }),
+  }
+);
+
+
 
     const aiData = await geminiRes.json();
     return (
