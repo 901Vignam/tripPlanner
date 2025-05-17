@@ -28,8 +28,8 @@ const handleSearch = async () => {
   setItinerary('');
 
   try {
-    // 🔹 1. Call Gemini 1.5 Pro to generate 3 clean search phrases
-    const geminiRes = await fetch(
+    // 🔹 1. Get relevant search queries from Gemini 1.5 Pro
+    const queryGenRes = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
       {
         method: 'POST',
@@ -39,8 +39,7 @@ const handleSearch = async () => {
             {
               parts: [
                 {
-                  text: `You're an expert AI travel assistant. Based on the user's travel interest "${prompt}", return exactly 3 clean YouTube Shorts search phrases. 
-Each should be a short keyword phrase (3–7 words), no markdown, no numbering, no quotes, no explanations. Output only the 3 phrases, one per line.`,
+                  text: `You're an expert AI travel assistant. Based on the user's travel interest "${prompt}", return exactly 3 clean YouTube Shorts search phrases. Each should be a short keyword phrase (3–7 words), no markdown, no quotes, no numbers. Output only the phrases, one per line.`,
                 },
               ],
             },
@@ -49,17 +48,39 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
       }
     );
 
-    const geminiData = await geminiRes.json();
-    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    const queries = text
+    const queryGenData = await queryGenRes.json();
+    const queryText = queryGenData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const queries = queryText
       .split('\n')
       .map((line:any) => line.trim())
       .filter((line:any) => line.length > 2);
 
-    console.log('✨ Gemini queries:', queries);
+    // 🔹 2. Use Gemini to extract destination/place name from the prompt
+    const locationRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `From this travel prompt: "${prompt}", extract the most likely destination or place (city, region, country). Only return the place name — no explanations.`,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
 
-    // 🔹 2. Run all 3 queries in parallel
+    const locationData = await locationRes.json();
+    const location =
+      locationData.candidates?.[0]?.content?.parts?.[0]?.text.trim().toLowerCase() || '';
+    console.log('📍 Extracted location:', location);
+
+    // 🔹 3. Run 3 parallel YouTube search queries
     const searchResponses = await Promise.all(
       queries.map((query:any) =>
         fetch(
@@ -71,7 +92,6 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
     );
 
     let allVideoIds: string[] = [];
-
     for (const result of searchResponses) {
       const ids = (result.items || [])
         .filter((item: any) => item.id.kind === 'youtube#video' && item.id.videoId)
@@ -79,8 +99,8 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
       allVideoIds.push(...ids);
     }
 
+    // 🔹 4. Fallback if no valid videos found
     if (allVideoIds.length === 0) {
-      // 🔹 fallback to Goa travel
       const fallbackRes = await fetch(
         `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&q=Goa travel&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
       );
@@ -96,7 +116,7 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
       videoChunks.push(uniqueVideoIds.slice(i, i + 50).join(','));
     }
 
-    // 🔹 3. Get video details
+    // 🔹 5. Get video details
     const detailResponses = await Promise.all(
       videoChunks.map((chunk) =>
         fetch(
@@ -107,7 +127,7 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
 
     const allDetails = detailResponses.flatMap((res) => res.items || []);
 
-    // 🔹 4. Rank & score videos
+    // 🔹 6. Score and rank videos
     const scoredVideos = allDetails
       .map((item: any, index: number): Video | null => {
         const duration = item.contentDetails.duration;
@@ -115,7 +135,6 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
         const minutes = parseInt(match?.[1] || '0');
         const seconds = parseInt(match?.[2] || '0');
         const totalSeconds = minutes * 60 + seconds;
-
         if (totalSeconds > 60) return null;
 
         const title = item.snippet.title || '';
@@ -141,8 +160,21 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
         const qualityScore =
           (totalSeconds <= 60 ? 5 : 0) + (tags.length >= 3 ? 5 : 2);
 
+        const locationMatched =
+          location &&
+          (
+            title.toLowerCase() +
+            description.toLowerCase() +
+            tags.join(' ').toLowerCase()
+          ).includes(location);
+
+        const locationBoost = locationMatched ? 5 : 0;
+
         const finalScore =
-          0.4 * relevanceScore + 0.3 * engagementScore + 0.3 * qualityScore;
+          0.4 * relevanceScore +
+          0.3 * engagementScore +
+          0.3 * qualityScore +
+          locationBoost;
 
         return {
           id: index,
@@ -166,46 +198,85 @@ Each should be a short keyword phrase (3–7 words), no markdown, no numbering, 
 };
 
 
+
   const toggleSelection = (id: number) => {
     const updated = new Set(selectedVideos);
     updated.has(id) ? updated.delete(id) : updated.add(id);
     setSelectedVideos(updated);
   };
 
-  const generateItinerary = async () => {
-    const selected = videos.filter((v) => selectedVideos.has(v.id));
-    if (selected.length === 0) return;
+const generateItinerary = async () => {
+  const selected = videos.filter((v) => selectedVideos.has(v.id));
+  if (selected.length === 0) return;
 
-    setLoading(true);
-    setError('');
-    setItinerary('');
+  setLoading(true);
+  setError('');
+  setItinerary('');
 
-    try {
-      const promptText = `You're a smart AI travel assistant. Based on the following YouTube Shorts, generate a realistic 2-day itinerary. Include grouped activities, timing suggestions, and links to popular websites for booking if possible.\n\n${selected
-        .map((v, i) => `${i + 1}. ${v.title} - ${v.url}`)
-        .join('\n')}`;
+  try {
+    // Optional: re-use extracted location from earlier and store it in state if needed
+    const locationRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `From this travel prompt: "${prompt}", extract the most likely destination or city name. Return only the place name.`,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }],
-          }),
-        }
-      );
+    const locationData = await locationRes.json();
+    const location =
+      locationData.candidates?.[0]?.content?.parts?.[0]?.text.trim() || '';
 
-      const data = await geminiRes.json();
-      const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      setItinerary(result);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to generate itinerary.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const promptText = `You're a smart AI travel planner. Based on the destination "${location}" and the following YouTube Shorts, generate a 2-day travel itinerary.
+
+Instructions:
+- Break it down by Day 1 and Day 2
+- Include "Morning", "Afternoon", "Evening" blocks
+- Mention key places or neighborhoods near each other
+- Suggest **estimated costs per activity or per day** (realistic, rough)
+- Provide helpful **booking site suggestions** (like Airbnb Experiences, Viator, GetYourGuide, etc.)
+- Format output clearly using markdown (headings, bullets, bold text)
+- Focus only on experiences relevant to the video content
+- Output should feel like a local guide summary
+
+Use these YouTube Shorts as travel inspiration:
+${selected.map((v, i) => `${i + 1}. ${v.title} - ${v.url}`).join('\n')}
+`;
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }],
+        }),
+      }
+    );
+
+    const data = await geminiRes.json();
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    setItinerary(result);
+  } catch (err) {
+    console.error(err);
+    setError('Failed to generate itinerary.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   return (
     <main className="min-h-screen bg-gray-100 p-6">
