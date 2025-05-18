@@ -1,10 +1,10 @@
 /* eslint-disable */
 
-'use client';
-import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { generateItineraryFromVideos } from './utils/generateItinerary';
+"use client";
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { generateItineraryFromVideos } from "./utils/generateItinerary";
 
 interface Video {
   id: number;
@@ -16,26 +16,26 @@ interface Video {
 }
 
 export default function HomePage() {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [selectedVideos, setSelectedVideos] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [itinerary, setItinerary] = useState('');
+  const [error, setError] = useState("");
+  const [itinerary, setItinerary] = useState("");
 
   const handleSearch = async () => {
     setLoading(true);
-    setError('');
+    setError("");
     setVideos([]);
     setSelectedVideos(new Set());
-    setItinerary('');
+    setItinerary("");
 
     try {
       const geminiQueryRes = await fetch(
         `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${"AIzaSyC0vJOYNP-UL_9mdG8E8vaPDvd1EfFalYU"}`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [
               {
@@ -51,13 +51,16 @@ export default function HomePage() {
       );
 
       const geminiData = await geminiQueryRes.json();
-      const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const queries = raw.split('\n').map((line:any) => line.replace(/^\-/, '').trim()).filter(Boolean);
+      const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const queries = raw
+        .split("\n")
+        .map((line: any) => line.replace(/^\-/, "").trim())
+        .filter(Boolean);
 
       let allVideoIds: string[] = [];
 
       const searchResponses = await Promise.all(
-        queries.map((query:any) =>
+        queries.map((query: any) =>
           fetch(
             `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&q=${encodeURIComponent(
               query
@@ -68,13 +71,15 @@ export default function HomePage() {
 
       for (const res of searchResponses) {
         const ids = (res.items || [])
-          .filter((item: any) => item.id.kind === 'youtube#video' && item.id.videoId)
+          .filter(
+            (item: any) => item.id.kind === "youtube#video" && item.id.videoId
+          )
           .map((item: any) => item.id.videoId);
         allVideoIds.push(...ids);
       }
 
       allVideoIds = Array.from(new Set(allVideoIds)).slice(0, 50);
-      const chunk = allVideoIds.join(',');
+      const chunk = allVideoIds.join(",");
 
       const detailsRes = await fetch(
         `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${chunk}&key=${"AIzaSyAsvBONMGaRs5FuXQUDMeJjvK34l8Ca-dc"}`
@@ -83,27 +88,29 @@ export default function HomePage() {
 
       const scoredVideos = detailData.items
         .map((item: any, index: number): Video | null => {
-          const title = item.snippet.title || '';
-          const description = item.snippet.description || '';
+          const title = item.snippet.title || "";
+          const description = item.snippet.description || "";
           const duration = item.contentDetails.duration;
 
           const match = duration.match(/PT(?:(\d+)M)?(?:(\d+)S)?/);
-          const minutes = parseInt(match?.[1] || '0');
-          const seconds = parseInt(match?.[2] || '0');
+          const minutes = parseInt(match?.[1] || "0");
+          const seconds = parseInt(match?.[2] || "0");
           const totalSeconds = minutes * 60 + seconds;
           if (totalSeconds > 60) return null;
 
-          const views = parseInt(item.statistics.viewCount || '0');
-          const likes = parseInt(item.statistics.likeCount || '0');
-          const comments = parseInt(item.statistics.commentCount || '0');
+          const views = parseInt(item.statistics.viewCount || "0");
+          const likes = parseInt(item.statistics.likeCount || "0");
+          const comments = parseInt(item.statistics.commentCount || "0");
 
-          const engagementScore = 0.4 * (views / 1000) + 0.3 * likes + 0.3 * comments;
+          const engagementScore =
+            0.4 * (views / 1000) + 0.3 * likes + 0.3 * comments;
           const relevanceScore =
             (title.toLowerCase().includes(prompt.toLowerCase()) ? 10 : 0) +
             (description.toLowerCase().includes(prompt.toLowerCase()) ? 5 : 0);
           const qualityScore = 5;
 
-          const score = 0.4 * relevanceScore + 0.3 * engagementScore + 0.3 * qualityScore;
+          const score =
+            0.4 * relevanceScore + 0.3 * engagementScore + 0.3 * qualityScore;
 
           return {
             id: index,
@@ -114,14 +121,14 @@ export default function HomePage() {
             score,
           };
         })
-        .filter((v:any): v is Video => v !== null)
-        .sort((a:any, b:any) => (b.score || 0) - (a.score || 0))
+        .filter((v: any): v is Video => v !== null)
+        .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
         .slice(0, 20);
 
       setVideos(scoredVideos);
     } catch (err) {
       console.error(err);
-      setError('Search failed. Check API keys.');
+      setError("Search failed. Check API keys.");
     } finally {
       setLoading(false);
     }
@@ -132,8 +139,8 @@ export default function HomePage() {
     if (selected.length === 0) return;
 
     setLoading(true);
-    setError('');
-    setItinerary('');
+    setError("");
+    setItinerary("");
 
     try {
       const result = await generateItineraryFromVideos(
@@ -148,7 +155,7 @@ export default function HomePage() {
       setItinerary(result);
     } catch (e) {
       console.error(e);
-      setError('Itinerary generation failed.');
+      setError("Itinerary generation failed.");
     } finally {
       setLoading(false);
     }
@@ -167,7 +174,8 @@ export default function HomePage() {
           🌍 Travel Shorts Explorer
         </h1>
         <p className="text-center mb-8 text-gray-600">
-          Discover experiences from YouTube Shorts and build your dream itinerary.
+          Discover experiences from YouTube Shorts and build your dream
+          itinerary.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -182,7 +190,7 @@ export default function HomePage() {
             disabled={loading}
             className="bg-blue-600 text-white px-6 py-2 rounded shadow hover:bg-blue-700 transition disabled:opacity-50"
           >
-            {loading ? 'Searching…' : 'Search Shorts'}
+            {loading ? "Searching…" : "Search Shorts"}
           </button>
         </div>
 
@@ -198,8 +206,8 @@ export default function HomePage() {
                   onClick={() => toggleSelection(video.id)}
                   className={`rounded overflow-hidden shadow hover:shadow-lg transition cursor-pointer border-2 ${
                     selectedVideos.has(video.id)
-                      ? 'border-green-500'
-                      : 'border-transparent'
+                      ? "border-green-500"
+                      : "border-transparent"
                   }`}
                 >
                   <img
@@ -208,7 +216,9 @@ export default function HomePage() {
                     className="w-full h-48 object-cover"
                   />
                   <div className="p-3">
-                    <p className="font-medium text-sm text-gray-800">{video.title}</p>
+                    <p className="font-medium text-sm text-gray-800">
+                      {video.title}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -217,25 +227,34 @@ export default function HomePage() {
         )}
 
         {selectedVideos.size > 0 && (
-          <div className="text-center mb-10">
-            <button
-              onClick={handleGenerateItinerary}
-              className="bg-green-600 text-white px-8 py-3 rounded shadow hover:bg-green-700 transition"
-            >
-              {loading ? 'Generating Itinerary…' : '🧭 Generate Itinerary'}
-            </button>
+          <div className="fixed bottom-4 inset-x-0 px-4 sm:static sm:text-center sm:mb-10 z-50">
+            <div className="bg-white sm:bg-transparent shadow sm:shadow-none rounded sm:rounded-none p-4 sm:p-0 flex justify-center">
+              <button
+                onClick={handleGenerateItinerary}
+                disabled={loading}
+                className="w-full sm:w-auto bg-green-600 text-white px-6 py-3 rounded shadow hover:bg-green-700 transition disabled:opacity-50"
+              >
+                {loading ? "Generating Itinerary…" : "🧭 Generate Itinerary"}
+              </button>
+            </div>
           </div>
         )}
 
         {loading && selectedVideos.size > 0 && (
-          <p className="text-center text-gray-600">🧠 Working on your itinerary…</p>
+          <p className="text-center text-gray-600">
+            🧠 Working on your itinerary…
+          </p>
         )}
 
         {itinerary && (
           <section>
-            <h2 className="text-2xl font-semibold mb-4">📌 Your AI-Powered Itinerary</h2>
+            <h2 className="text-2xl font-semibold mb-4">
+              📌 Your AI-Powered Itinerary
+            </h2>
             <div className="bg-white p-6 rounded-lg shadow prose max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{itinerary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {itinerary}
+              </ReactMarkdown>
             </div>
           </section>
         )}
