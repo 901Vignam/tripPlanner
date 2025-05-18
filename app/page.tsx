@@ -1,5 +1,6 @@
-'use client';
+/* eslint-disable */
 
+'use client';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,7 +32,7 @@ export default function HomePage() {
 
     try {
       const geminiQueryRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${"AIzaSyC0vJOYNP-UL_9mdG8E8vaPDvd1EfFalYU"}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -76,7 +77,7 @@ export default function HomePage() {
       const chunk = allVideoIds.join(',');
 
       const detailsRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${chunk}&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${chunk}&key=${"AIzaSyAsvBONMGaRs5FuXQUDMeJjvK34l8Ca-dc"}`
       );
       const detailData = await detailsRes.json();
 
