@@ -96,7 +96,7 @@ Videos:`
 ];
 
 const geminiRes = await fetch(
-  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`,
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${"AIzaSyAsvBONMGaRs5FuXQUDMeJjvK34l8Ca-dc"}`,
   {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

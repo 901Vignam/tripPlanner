@@ -61,7 +61,7 @@ export default function HomePage() {
           fetch(
             `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&q=${encodeURIComponent(
               query
-            )}&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+            )}&key=${"AIzaSyAsvBONMGaRs5FuXQUDMeJjvK34l8Ca-dc"}`
           ).then((res) => res.json())
         )
       );
